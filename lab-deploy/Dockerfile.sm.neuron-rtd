@@ -1,0 +1,63 @@
+# Example neuron-rtd dockerfile.
+
+# To build:
+#    docker build . -f Dockerfile.neuron-rtd -t neuron-rtd
+
+# Note: the container must start with CAP_SYS_ADMIN + CAP_IPC_LOCK capabilities in order
+# to map the memory needed from the Infernetia devices. These capabilities will
+# be dropped following initialization.
+
+# i.e. To start the container with required capabilities:
+#   docker run --env AWS_NEURON_VISIBLE_DEVICES="0" --cap-add SYS_ADMIN --cap-add IPC_LOCK -v /tmp/neuron_rtd_sock/:/sock neuron-rtd
+
+FROM amazonlinux:2
+
+MAINTAINER Chaitanya Hazarey <chazarey@amazon.com>
+
+RUN echo $'[neuron] \n\
+name=Neuron YUM Repository \n\
+baseurl=https://yum.repos.neuron.amazonaws.com \n\
+enabled=1' > /etc/yum.repos.d/neuron.repo
+
+RUN rpm --import https://yum.repos.neuron.amazonaws.com/GPG-PUB-KEY-AMAZON-AWS-NEURON.PUB
+
+RUN yum install -y wget 
+RUN yum install -y aws-neuron-tools
+RUN yum install -y aws-neuron-runtime
+#RUN yum install -y python
+RUN yum install -y tar gzip ca-certificates procps net-tools which vim
+RUN amazon-linux-extras install -y nginx1
+
+# Here we get all python packages.
+# There's substantial overlap between scipy and numpy that we eliminate by
+# linking them together. Likewise, pip leaves the install caches populated which uses
+# a significant amount of space. These optimizations save a fair amount of space in the
+# image, which reduces start up time.
+#/usr/lib64/python2.7/site-packages/scipy
+
+
+RUN yum install -y python3 libgomp
+RUN wget https://bootstrap.pypa.io/get-pip.py
+RUN python3 get-pip.py && \
+    pip3 install --upgrade --force-reinstall --no-cache-dir 'numpy<=1.18.2,>=1.13.3' \ 
+    'torch>=1.5.1' 'neuron-cc[tensorflow]>=1.0.16861.0' torch-neuron\ 
+    scipy==1.2.1 scikit-learn==0.20.2 pandas flask gevent gunicorn \
+    transformers==2.5.1 --extra-index-url=https://pip.repos.neuron.amazonaws.com
+    
+# Set some environment variables. PYTHONUNBUFFERED keeps Python from buffering our standard
+# output stream, which means that logs can be delivered to the user quickly. PYTHONDONTWRITEBYTECODE
+# keeps Python from writing the .pyc files which are unnecessary in this case. We also update
+# PATH so that the train and serve programs are found when the container is invoked.
+
+ENV PYTHONUNBUFFERED=TRUE
+ENV PYTHONDONTWRITEBYTECODE=TRUE
+ENV PATH="/opt/program:${PATH}"
+
+# Set up the program in the image
+COPY code /opt/program
+ENV PATH="/opt/aws/neuron/bin:${PATH}"
+
+CMD neuron-rtd -g unix:/sock/neuron.sock --log-console
+
+WORKDIR /opt/program
+
