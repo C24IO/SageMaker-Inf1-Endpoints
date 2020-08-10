@@ -25,6 +25,8 @@ cpu_count = multiprocessing.cpu_count()
 
 model_server_timeout = os.environ.get('MODEL_SERVER_TIMEOUT', 60)
 model_server_workers = int(os.environ.get('MODEL_SERVER_WORKERS', cpu_count))
+model_threads = int(1)
+model_server_workers = int(1)
 
 def sigterm_handler(nginx_pid, gunicorn_pid):
     try:
@@ -50,6 +52,7 @@ def start_server():
     gunicorn = subprocess.Popen(['gunicorn',
                                  '--timeout', str(model_server_timeout),
                                  '-k', 'gevent',
+                                 '--threads', str(model_threads),
                                  '-b', 'unix:/tmp/gunicorn.sock',
                                  '-w', str(model_server_workers),
                                  'wsgi:app'])

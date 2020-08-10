@@ -21,6 +21,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import logging
 import numpy as np
 import io
+import urllib.request
+
+
 
 try:
     from StringIO import StringIO ## for Python 2
@@ -78,6 +81,7 @@ def ping():
     #health = True 
 
     status = 200 if health else 404
+    
     return flask.Response(response='\n', status=status, mimetype='application/json')
 
 @app.route('/invocations', methods=['POST'])
