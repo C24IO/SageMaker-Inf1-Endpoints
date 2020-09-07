@@ -51,6 +51,7 @@ RUN python3 get-pip.py && \
 
 RUN cp -r /usr/local/lib/python3.7/site-packages/torch/neuron/ /usr/local/lib64/python3.7/site-packages/torch/
 
+ENV NEURONCORE_GROUP_SIZES=1
 ENV PYTHONUNBUFFERED=TRUE
 ENV PYTHONDONTWRITEBYTECODE=TRUE
 ENV PATH="/opt/program:${PATH}"
