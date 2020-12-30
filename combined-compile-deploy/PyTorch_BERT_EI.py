@@ -1,25 +1,27 @@
 # Source - https://aws.amazon.com/blogs/machine-learning/fine-tuning-a-pytorch-bert-model-and-deploying-it-with-amazon-elastic-inference-on-amazon-sagemaker/
 
 import os
-
-import pandas as pd
+import torch
 import sagemaker
+import subprocess
+import pandas as pd
+from sagemaker.pytorch import PyTorch
+from sagemaker.pytorch import PyTorchModel
+from sagemaker.pytorch.model import PyTorchModel
 from sklearn.model_selection import train_test_split
+from transformers import BertForSequenceClassification
 
 sagemaker_session = sagemaker.Session()
-
 bucket = sagemaker_session.default_bucket()
 prefix = "sagemaker/DEMO-pytorch-bert"
 
 # role = sagemaker.get_execution_role()
 role = 'arn:aws:iam::111652037296:role/service-role/AmazonSageMaker-ExecutionRole-20180406T143398'
 
-
 def exec_cmd(cmd):
     f = os.popen(cmd)
     now = f.read()
     print(now)
-
 
 if not os.path.exists("./cola_public_1.1.zip"):
     exec_cmd('curl -o ./cola_public_1.1.zip https://nyu-mll.github.io/CoLA/cola_public_1.1.zip')
@@ -39,16 +41,12 @@ labels = df.label.values
 print(sentences[20:25])
 print(labels[20:25])
 
-
-
 train, test = train_test_split(df)
 train.to_csv("./cola_public/train.csv", index=False)
 test.to_csv("./cola_public/test.csv", index=False)
 
 inputs_train = sagemaker_session.upload_data("./cola_public/train.csv", bucket=bucket, key_prefix=prefix)
 inputs_test = sagemaker_session.upload_data("./cola_public/test.csv", bucket=bucket, key_prefix=prefix)
-
-from sagemaker.pytorch import PyTorch
 
 estimator = PyTorch(
     entry_point="train_deploy.py",
@@ -82,8 +80,6 @@ estimator = PyTorch(
 
 # Pretrained model
 
-from sagemaker.pytorch.model import PyTorchModel
-
 pytorch_model = PyTorchModel(
     model_data="s3://sagemaker-us-east-1-111652037296/pytorch-training-2020-12-29-19-35-32-544/output/model.tar.gz",
     role=role,
@@ -95,10 +91,6 @@ pytorch_model = PyTorchModel(
 ##predictor = pytorch_model.deploy(initial_instance_count=1, instance_type="ml.m4.xlarge")
 
 # print(estimator.model_data)
-
-import subprocess
-import torch
-from transformers import BertForSequenceClassification
 
 model_torchScript = BertForSequenceClassification.from_pretrained("model/", torchscript=True)
 device = "cpu"
@@ -114,18 +106,14 @@ torch.jit.save(traced_model, "traced_bert.pt")
 
 subprocess.call(["tar", "-czvf", "traced_bert.tar.gz", "traced_bert.pt"])
 
-from sagemaker.pytorch import PyTorchModel
-
 instance_type = 'ml.m5.large'
 accelerator_type = 'ml.eia2.xlarge'
-
 # TorchScript model
 tar_filename = 'traced_bert.tar.gz'
 
 # Returns S3 bucket URL
 print('Upload tarball to S3')
 model_data = sagemaker_session.upload_data(path=tar_filename, bucket=bucket, key_prefix=prefix)
-
 endpoint_name = 'bert-ei-traced-{}-{}'.format(instance_type, accelerator_type).replace('.', '').replace('_', '')
 
 pytorch = PyTorchModel(
